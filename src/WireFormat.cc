@@ -122,6 +122,8 @@ opcodeSymbol(uint32_t opcode)
         case TX_REQUEST_ABORT:             return "TX_REQUEST_ABORT";
         case TX_HINT_FAILED:               return "TX_HINT_FAILED";
         case ECHO:                         return "ECHO";
+        case ROCKSTEADY_PRIORITY_READ_HASHES:
+                                    return "ROCKSTEADY_PRIORITY_READ_HASHES";
         case ILLEGAL_RPC_TYPE:             return "ILLEGAL_RPC_TYPE";
     }
 

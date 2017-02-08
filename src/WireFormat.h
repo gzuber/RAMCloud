@@ -130,7 +130,9 @@ enum Opcode {
     TX_REQUEST_ABORT            = 78,
     TX_HINT_FAILED              = 79,
     ECHO                        = 80,
-    ILLEGAL_RPC_TYPE            = 81, // 1 + the highest legitimate Opcode
+    // TODO(gzuber):
+    ROCKSTEADY_PRIORITY_READ_HASHES = 81,
+    ILLEGAL_RPC_TYPE            = 82, // 1 + the highest legitimate Opcode
 };
 
 /**
@@ -914,6 +916,36 @@ struct ReadHashes {
                                         // objects are being returned or
                                         // do not exist.
         uint32_t numObjects;            // Number of objects being returned.
+
+        // In buffer: For each object being returned,
+        // uint64_t version, uint32_t length and the actual object bytes
+        // (all the keys and value) go here. The actual object bytes is
+        // of variable length, indicated by the length.
+    } __attribute__((packed));
+};
+
+/**
+ * Used by a client to request objects by primary key hash from a master.
+ */
+struct RocksteadyPriorityReadHashes {
+    static const Opcode opcode = ROCKSTEADY_PRIORITY_READ_HASHES;
+    static const ServiceType service = MASTER_SERVICE;
+
+    struct Request {
+        RequestCommon common;
+        uint64_t tableId;               // Id of the table for the lookup.
+        uint32_t numHashes;             // Number of key hashes in following
+                                        // buffer to be looked up.
+        // In buffer: Key hashes for primary key for objects to be read go here.
+    } __attribute__((packed));
+
+    struct Response {
+        ResponseCommon common;
+        uint32_t numHashes;             // Number of key hashes for which
+                                        // objects are being returned or
+                                        // do not exist.
+        // TODO(gzuber): don't think I need this
+        //uint32_t numObjects;            // Number of objects being returned.
 
         // In buffer: For each object being returned,
         // uint64_t version, uint32_t length and the actual object bytes

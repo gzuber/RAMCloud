@@ -93,6 +93,11 @@ class MasterClient {
     static void txHintFailed(Context* context, uint64_t tableId,
             uint64_t keyHash, uint64_t leaseId, uint64_t clientTransactionId,
             uint32_t participantCount, WireFormat::TxParticipant *participants);
+    static void rocksteadyPriorityReadHashes(
+            const WireFormat::RocksteadyPriorityReadHashes::Request* reqHdr,
+            WireFormat::RocksteadyPriorityReadHashes::Response* respHdr,
+            Rpc* rpc);
+
 
   private:
     MasterClient();
@@ -353,6 +358,25 @@ class TxHintFailedRpc : public ObjectRpcWrapper {
 
   PRIVATE:
     DISALLOW_COPY_AND_ASSIGN(TxHintFailedRpc);
+};
+
+/**
+ * Encapsulates the state of a MasterClient::RocksteadyPriorityReadHashes
+ * request, allowing it to execute asynchronously.
+ */
+class RocksteadyPriorityReadHashesRpc : public ServerIdRpcWrapper {
+  public:
+    RocksteadyPriorityReadHashesRpc(Context* context, uint64_t tableId,
+        uint32_t numHashes, Buffer* pKHashes, Buffer* response);
+    ~RocksteadyPriorityReadHashesRpc() {}
+
+    // TODO(gzuber): should this be numHashes? Does this mean I need numObjects?
+    // ReadHashesRpc supplies numObjects to wait() so it knows for how many to wait
+    void wait() {waitAndCheckErrors();}
+
+  PRIVATE:
+    DISALLOW_COPY_AND_ASSIGN(RocksteadyPriorityReadHashesRpc);
+
 };
 
 } // namespace RAMCloud
