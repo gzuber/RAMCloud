@@ -191,6 +191,10 @@ class MasterService : public Service {
                 const WireFormat::ReadHashes::Request* reqHdr,
                 WireFormat::ReadHashes::Response* respHdr,
                 Rpc* rpc);
+    void rocksteadyPriorityReadHashes(
+                const WireFormat::RocksteadyPriorityReadHashes::Request* reqHdr,
+                WireFormat::RocksteadyPriorityReadHashes::Response* respHdr,
+                Rpc* rpc);
     void initOnceEnlisted();
     void insertIndexEntry(const WireFormat::InsertIndexEntry::Request* reqHdr,
                 WireFormat::InsertIndexEntry::Response* respHdr,

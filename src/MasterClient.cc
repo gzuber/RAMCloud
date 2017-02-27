@@ -1209,8 +1209,4 @@ RocksteadyPriorityReadHashesRpc::RocksteadyPriorityReadHashesRpc(Context* contex
   send();
 }
 
-
-
-
-
 }  // namespace RAMCloud

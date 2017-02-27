@@ -262,6 +262,118 @@ ObjectManager::readHashes(const uint64_t tableId, uint32_t reqNumHashes,
     }
 }
 
+//TODO(gzuber): change this function
+/**
+ * Read object(s) with the given primary key hashes, previously written by
+ * ObjectManager.
+ *
+ * We'd typically expect one object to match one primary key hash, but it is
+ * possible that zero (if that object was removed after client got the key
+ * hash), one, or multiple (if there are multiple objects with the same primary
+ * key hash) objects match.
+ *
+ * \param tableId
+ *      Id of the table containing the object(s).
+ * \param reqNumHashes
+ *      Number of key hashes (see pKHashes) in the request.
+ * \param pKHashes
+ *      Key hashes of the primary keys of the object(s).
+ * \param initialPKHashesOffset
+ *      Offset indicating location of first key hash in the pKHashes buffer.
+ * \param maxLength
+ *      Maximum length of response that can be put in the response buffer.
+ *
+ * \param[out] response
+ *      Buffer of objects whose primary key hashes match those requested.
+ * \param[out] respNumHashes
+ *      Number of hashes corresponding to objects being returned.
+ * \param[out] numObjects
+ *      Number of objects being returned.
+ */
+void
+ObjectManager::rocksteadyPriorityReadHashes(const uint64_t tableId, uint32_t reqNumHashes,
+            Buffer* pKHashes, uint32_t initialPKHashesOffset,
+            uint32_t maxLength, Buffer* response, uint32_t* respNumHashes)
+{
+    // The current length of the response buffer in bytes. This is the
+    // cumulative length of all the objects that have been appended to response
+    // till now.
+    // This length should be less than maxLength before returning to the client.
+    uint32_t currentLength = 0;
+    // The length for the data corresponding to the object that was just
+    // appended to the response buffer.
+    uint32_t partLength = 0;
+    // The primary key hash being processed (that is, for which the objects
+    // are being looked up) in the current iteration of the loop below.
+    uint64_t pKHash;
+    // Offset into pKHashes buffer where the next pKHash to be processed
+    // is available.
+    uint32_t pKHashesOffset = initialPKHashesOffset;
+
+    for (*respNumHashes = 0; *respNumHashes < reqNumHashes;
+            *respNumHashes += 1) {
+
+        pKHash = *(pKHashes->getOffset<uint64_t>(pKHashesOffset));
+        pKHashesOffset += sizeof32(pKHash);
+
+        // Instead of calling a private lookup function as in a "normal" read,
+        // doing the work here directly, since the abstraction breaks down
+        // as multiple objects having the same primary key hash may match
+        // the index key range.
+        objectMap.prefetchBucket(pKHash);
+        HashTableBucketLock lock(*this, pKHash); // unlocks self on destruct
+
+        // If the tablet doesn't exist in the NORMAL state,
+        // we must plead ignorance.
+        // Client can refresh its tablet information and retry.
+        TabletManager::Tablet tablet;
+        if (!tabletManager->getTablet(tableId, pKHash, &tablet))
+            return;
+        if (tablet.state != TabletManager::NORMAL) {
+            if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
+                throw RetryException(HERE, 1000, 2000,
+                        "Tablet is currently locked for migration!");
+            return;
+        }
+
+        HashTable::Candidates candidates;
+        objectMap.lookup(pKHash, candidates);
+        for (; !candidates.isDone(); candidates.next()) {
+            Buffer candidateBuffer;
+            Log::Reference candidateRef(candidates.getReference());
+            LogEntryType type = log.getEntry(candidateRef, candidateBuffer);
+
+            if (type != LOG_ENTRY_TYPE_OBJ)
+                continue;
+
+            Object object(candidateBuffer);
+
+            // Candidate may have only partially matching primary key hash.
+            if (object.getPKHash() == pKHash) {
+                response->emplaceAppend<uint64_t>(object.getVersion());
+                response->emplaceAppend<uint32_t>(
+                        object.getKeysAndValueLength());
+                object.appendKeysAndValueToBuffer(*response);
+
+                tabletManager->incrementReadCount(object.getTableId(),
+                        object.getPKHash());
+                ++PerfStats::threadStats.readCount;
+                uint32_t valueLength = object.getValueLength();
+                PerfStats::threadStats.readObjectBytes += valueLength;
+                PerfStats::threadStats.readKeyBytes +=
+                        object.getKeysAndValueLength() - valueLength;
+            }
+        }
+
+        partLength = response->size() - currentLength;
+        if (currentLength > maxLength) {
+            response->truncate(response->size() - partLength);
+            break;
+        }
+        currentLength += partLength;
+    }
+}
+
 /**
  * This method is used by replaySegment() to prefetch the hash table bucket
  * corresponding to the next entry to be replayed. Doing so avoids a cache

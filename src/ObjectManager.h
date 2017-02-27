@@ -73,6 +73,9 @@ class ObjectManager : public LogEntryHandlers,
                 Buffer* pKHashes, uint32_t initialPKHashesOffset,
                 uint32_t maxLength, Buffer* response, uint32_t* respNumHashes,
                 uint32_t* numObjects);
+    void rocksteadyPriorityReadHashes(const uint64_t tableId, uint32_t reqNumHashes,
+                Buffer* pKHashes, uint32_t initialPKHashesOffset,
+                uint32_t maxLength, Buffer* response, uint32_t* respNumHashes);
     void prefetchHashTableBucket(SegmentIterator* it);
     Status readObject(Key& key, Buffer* outBuffer,
                 RejectRules* rejectRules, uint64_t* outVersion,

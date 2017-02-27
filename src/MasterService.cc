@@ -824,6 +824,27 @@ MasterService::readHashes(
             rpc->replyPayload, &respHdr->numHashes, &respHdr->numObjects);
 }
 
+
+/**
+ * Top-level server method to handle the ROCKSTEADY_PRIORITY_READ_HASHES 
+ * request.
+ *
+ * \copydetails Service::ping
+ */
+void
+MasterService::rocksteadyPriorityReadHashes(
+        const WireFormat::RocksteadyPriorityReadHashes::Request* reqHdr,
+        WireFormat::RocksteadyPriorityReadHashes::Response* respHdr,
+        Rpc* rpc)
+{
+    uint32_t reqOffset = sizeof32(*reqHdr);
+
+    objectManager.rocksteadyPriorityReadHashes(reqHdr->tableId, 
+            reqHdr->numHashes, rpc->requestPayload, reqOffset,
+            maxResponseRpcLen - sizeof32(*respHdr),
+            rpc->replyPayload, &respHdr->numHashes, &respHdr->numObjects);
+}
+
 /**
  * Perform once-only initialization for the master service after having
  * enlisted the process with the coordinator.
