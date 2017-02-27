@@ -130,7 +130,6 @@ enum Opcode {
     TX_REQUEST_ABORT            = 78,
     TX_HINT_FAILED              = 79,
     ECHO                        = 80,
-    // TODO(gzuber):
     ROCKSTEADY_PRIORITY_READ_HASHES = 81,
     ILLEGAL_RPC_TYPE            = 82, // 1 + the highest legitimate Opcode
 };
