@@ -93,10 +93,9 @@ class MasterClient {
     static void txHintFailed(Context* context, uint64_t tableId,
             uint64_t keyHash, uint64_t leaseId, uint64_t clientTransactionId,
             uint32_t participantCount, WireFormat::TxParticipant *participants);
-    static void rocksteadyPriorityReadHashes(
-            const WireFormat::RocksteadyPriorityReadHashes::Request* reqHdr,
-            WireFormat::RocksteadyPriorityReadHashes::Response* respHdr,
-            Rpc* rpc);
+    static void rocksteadyPriorityReadHashes(Context* context, ServerId serverId,
+            uint64_t tableId, uint32_t numHashes, Buffer* pKHashes, 
+            Buffer* response);
 
 
   private:
@@ -366,8 +365,9 @@ class TxHintFailedRpc : public ObjectRpcWrapper {
  */
 class RocksteadyPriorityReadHashesRpc : public ServerIdRpcWrapper {
   public:
-    RocksteadyPriorityReadHashesRpc(Context* context, uint64_t tableId,
-        uint32_t numHashes, Buffer* pKHashes, Buffer* response);
+    RocksteadyPriorityReadHashesRpc(Context* context, ServerId serverId,
+        uint64_t tableId, uint32_t numHashes, Buffer* pKHashes, 
+        Buffer* response);
     ~RocksteadyPriorityReadHashesRpc() {}
 
     // TODO(gzuber): should this be numHashes? Does this mean I need numObjects?

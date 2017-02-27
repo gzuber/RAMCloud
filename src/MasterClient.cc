@@ -1113,4 +1113,104 @@ TxHintFailedRpc::TxHintFailedRpc(
     send();
 }
 
+//TODO(gzuber): edit these comments
+/**
+ * Prioritizes reading objects in a table with given primary key hashes and
+ * queues them for immediate migration to new server.
+ *
+ * An RPC will be sent to a single server S1. This request RPC will contain
+ * all the key hashes, even though S1 may not be able to service them all.
+ * S1 returns the objects corresponding to the key hashes it can, along with an
+ * indication that can be used to calculate the next key hash to be fetched.
+ * The indication is the number of hashes for which objects are being returned
+ * or were not found.
+ *
+ * The next RPC would be initiated by the client by trimming the key hash
+ * list according to the previous response.
+ * This rpc will get sent to the server owning the new first key hash.
+ * This could be S1 in case it couldn't fit all the objects in a single RPC
+ * the first time it sent the response, or a different server S2 in case S1
+ * didn't own these other objects.
+ *
+ * \param context
+ *      Overall information about this RAMCloud server or client.
+ * \param serverId
+ *      Identifier for the target server.
+ * \param tableId
+ *      Id of the table to read from.
+ * \param numHashes
+ *      Number of primary key hashes in the following buffer.
+ * \param pKHashes
+ *      Buffer of primary key hashes of objects desired in this request.
+ *
+ * \param[out] response
+ *      Return all the objects matching the given primary key hashes
+ *      along with their versions, in the format specified by
+ *      WireFormat::ReadHashes::Response.
+ * \param[out] numObjects
+ *      Number of objects that are being returned.
+ *      For each primary key hash in pKHashes, the operation could return:
+ *      (a) One corresponding object, or
+ *      (b) More than one corresponding objects if there are multiple objects
+ *              with the same primary key hash and secondary key, or
+ *      (c) No object if the object isn't on the server (where the query is
+ *              currently being sent), or
+ *      (d) No object if the server has appended enough data (objects) to the
+ *              response rpc that it cannot fit any more objects.
+ * \return
+ *      Number of key hashes for which corresponding objects are being
+ *      returned, or for which no matching objects were found.
+ *      If this number is less than the total number of hashes in the
+ *      original request, that means not all of those hashes were used.
+ */
+void
+MasterClient::rocksteadyPriorityReadHashes(Context* context, ServerId serverId,
+        uint64_t tableId, uint32_t numHashes, Buffer* pKHashes, Buffer* response)
+{
+  RocksteadyPriorityReadHashesRpc rpc(context, serverId, tableId, numHashes,
+     pKHashes, response);
+   rpc.wait();
+}
+
+
+/**
+ * Constructor for RocksteadyPriorityReadHashesRpc: initiates RPC(s) in 
+ * the same way as #MasterClient::rocksteadyPriorityReadHashes, but 
+ * returns once first RPC has been initiated, without waiting for any 
+ * to complete.
+ *
+ * \param context
+ *      Overall information about this RAMCloud server or client.
+ * \param serverId
+ *      Identifier for the target server.
+ * \param tableId
+ *      Id of the table to read from.
+ * \param numHashes
+ *      Number of primary key hashes in the following buffer.
+ * \param pKHashes
+ *      Buffer of primary key hashes of objects desired in this request.
+ *
+ * \param[out] response
+ *      Return all the objects matching the given primary key hashes
+ *      along with their versions, in the format specified by
+ *      WireFormat::RocksteadyPriorityReadHashes::Response.
+ */
+RocksteadyPriorityReadHashesRpc::RocksteadyPriorityReadHashesRpc(Context* context,
+        ServerId serverId, uint64_t tableId, uint32_t numHashes, Buffer* pKHashes, 
+        Buffer* response)
+    : ServerIdRpcWrapper(context, serverId,
+            sizeof(WireFormat::RocksteadyPriorityReadHashes::Response))
+{
+  WireFormat::RocksteadyPriorityReadHashes::Request* reqHdr(
+      allocHeader<WireFormat::RocksteadyPriorityReadHashes>());
+  reqHdr->tableId = tableId;
+  reqHdr->numHashes = numHashes;
+  request.append(pKHashes, 0, pKHashes->size());
+  send();
+}
+
+
+
+
+
 }  // namespace RAMCloud
