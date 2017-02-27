@@ -842,7 +842,7 @@ MasterService::rocksteadyPriorityReadHashes(
     objectManager.rocksteadyPriorityReadHashes(reqHdr->tableId, 
             reqHdr->numHashes, rpc->requestPayload, reqOffset,
             maxResponseRpcLen - sizeof32(*respHdr),
-            rpc->replyPayload, &respHdr->numHashes, &respHdr->numObjects);
+            rpc->replyPayload, &respHdr->numHashes);
 }
 
 /**
