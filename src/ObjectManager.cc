@@ -310,6 +310,18 @@ ObjectManager::rocksteadyPriorityReadHashes(const uint64_t tableId, uint32_t req
     // is available.
     uint32_t pKHashesOffset = initialPKHashesOffset;
 
+    // If the tablet doesn't exist in the NORMAL state,
+    // we must plead ignorance.
+    // Client can refresh its tablet information and retry.
+    TabletManager::Tablet tablet;
+    if (!tabletManager->getTablet(tableId, pKHash, &tablet))
+      return;
+    if (tablet.state != TabletManager::LOCKED_FOR_MIGRATION) {
+      throw RetryException(HERE, 1000, 2000,
+          "Tablet is not currently locked for migration!");
+      return;
+    }
+
     for (*respNumHashes = 0; *respNumHashes < reqNumHashes;
             *respNumHashes += 1) {
 
@@ -323,54 +335,44 @@ ObjectManager::rocksteadyPriorityReadHashes(const uint64_t tableId, uint32_t req
         objectMap.prefetchBucket(pKHash);
         HashTableBucketLock lock(*this, pKHash); // unlocks self on destruct
 
-        // If the tablet doesn't exist in the NORMAL state,
-        // we must plead ignorance.
-        // Client can refresh its tablet information and retry.
-        TabletManager::Tablet tablet;
-        if (!tabletManager->getTablet(tableId, pKHash, &tablet))
-            return;
-        if (tablet.state != TabletManager::NORMAL) {
-            if (tablet.state == TabletManager::LOCKED_FOR_MIGRATION)
-                throw RetryException(HERE, 1000, 2000,
-                        "Tablet is currently locked for migration!");
-            return;
-        }
-
         HashTable::Candidates candidates;
         objectMap.lookup(pKHash, candidates);
         for (; !candidates.isDone(); candidates.next()) {
-            Buffer candidateBuffer;
             Log::Reference candidateRef(candidates.getReference());
-            LogEntryType type = log.getEntry(candidateRef, candidateBuffer);
+            LogEntryType type = log.getEntry(candidateRef, *response);
 
             if (type != LOG_ENTRY_TYPE_OBJ)
                 continue;
 
-            Object object(candidateBuffer);
+            Object object(*response, currentLength, response->size() - currentLength);
 
-            // Candidate may have only partially matching primary key hash.
-            if (object.getPKHash() == pKHash) {
-                response->emplaceAppend<uint64_t>(object.getVersion());
-                response->emplaceAppend<uint32_t>(
-                        object.getKeysAndValueLength());
-                object.appendKeysAndValueToBuffer(*response);
-
+            // tables must match
+            if (object.getTableId() == tableId) {
+                //TODO(gzuber): do I need this tracking stuff?
                 tabletManager->incrementReadCount(object.getTableId(),
                         object.getPKHash());
                 ++PerfStats::threadStats.readCount;
                 uint32_t valueLength = object.getValueLength();
                 PerfStats::threadStats.readObjectBytes += valueLength;
                 PerfStats::threadStats.readKeyBytes +=
-                        object.getKeysAndValueLength() - valueLength;
+                object.getKeysAndValueLength() - valueLength;
+
+                //TODO(gzuber): should I move this inside?
+                partLength = response->size() - currentLength;
+                if (currentLength > maxLength) {
+                  response->truncate(response->size() - partLength);
+
+                  //TODO(gzuber): can I return here?
+                  return;
+                }
+                currentLength += partLength;
+            }
+            else {
+              // if not the same table, truncate from response
+              response->truncate(currentLength);
             }
         }
 
-        partLength = response->size() - currentLength;
-        if (currentLength > maxLength) {
-            response->truncate(response->size() - partLength);
-            break;
-        }
-        currentLength += partLength;
     }
 }
 
